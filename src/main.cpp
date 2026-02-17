@@ -88,6 +88,7 @@ int main() {
     uptime_init();
     timebase_init();
 
+    //NOTE: might need to rethink this once we get USB RNDIS Network device working
     if(cfg_wifi())
         ntp_server_init();
     else
