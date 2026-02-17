@@ -79,6 +79,10 @@ int main() {
         sleep_ms(100);
     }
 #endif
+    //optional sleep so you have time to start terminal application to see bootup process
+    sleep_ms(15000);
+    printf("\x1b[?25l"); // hide cursor
+    printf("PICO NTPServer starting...\r\n");
 
     temp_init();
     uptime_init();
@@ -91,8 +95,6 @@ int main() {
 
     setup_led(timer);
 
-    printf("\x1b[?25l"); // hide cursor
-    printf("Starting...\r\n");
 
     GpsUart::init(9600, /*rx_gpio=*/1, /*tx_gpio=*/0);
 
