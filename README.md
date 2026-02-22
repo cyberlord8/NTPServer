@@ -1,246 +1,204 @@
-> **Note ✨ (AI-Generated README):** This `README.md` was generated with AI assistance. It may contain mistakes, outdated assumptions, or phrasing that is overly enthusiastic about the project. Treat it as a starting point and verify technical details (pin mappings, build steps, features, and roadmap items) against the actual code and hardware setup.
 
-# Pico GPS Stratum-1 NTP Server (RP2040 / Pico W)
+# Pico W GPS NTP Server (NMEA-based Stratum-1 Style)
 
-A **GPS-disciplined (Stratum-1 style) NTP server** built on **Raspberry Pi Pico W (RP2040)** using the **Pico SDK (C/C++)**.
+A **GPS-based NTP server** for the **Raspberry Pi Pico W (RP2040)** built with the **Pico SDK (C/C++)**.
 
-**Time source:** Waveshare Pico GPS L76X via **UART0**  
-**Time discipline:** NMEA (RMC/GGA/ZDA) now, **PPS** planned (GPIO IRQ timestamping)
-
-This project is aimed at being a **small, deterministic, no-BS time appliance**: stable, debuggable, and friendly to embedded constraints.
+This implementation uses **GPS/NMEA time** (RMC + date) to seed an internal timebase and serves NTP on UDP/123 over **Pico W Wi-Fi**. PPS discipline is planned (the code already reserves a `Locked` state for it).
 
 ---
 
-## Features
+> **Note (AI-Generated README):** This `README.md` was generated with AI assistance. It may contain mistakes, outdated assumptions, or wording that’s overly enthusiastic. Treat it as a starting point and verify details (pin mappings, build steps, features) against the actual code and hardware.
 
-- **NTP server over UDP** (lwIP)
-- **GPS/NMEA parsing** (lightweight, robust)
-  - Minimally handles: **RMC, GGA, ZDA**
-  - Does *not* require a full NMEA library
-- **State machine** for GPS lock state:
-  - `Booting → Acquiring → Acquired → Locked (reserved for PPS) → Error`
-  - *Pre-PPS meaning:*  
-    - **Acquired** requires `RMC status = 'A'` and `GGA fix quality > 0`
-    - **Locked** is reserved for PPS discipline
-- **USB CDC console UI** (ANSI dashboard, 2–5 Hz redraw)
-- **LED heartbeat** via repeating timer (short + deterministic callbacks)
-- **Scaled integer / raw string output** preferred (float printf not required)
+---
+
+## What the Current Code Does (as of latest sources)
+
+### Networking / NTP
+- Initializes **Wi-Fi STA mode** and connects using credentials from `wifi_secrets.h`.
+- Configures **static IPv4** by default in `main.cpp`:
+  - IP: **192.168.0.123**
+  - Netmask: **255.255.255.0**
+  - Gateway: **192.168.0.1**
+  - DNS (optional): **192.168.0.200**
+- Starts an **NTP server** on **UDP port 123** when Wi-Fi connect succeeds.
+- NTP reply behavior (`ntp_server.cpp`):
+  - Responds only to **client mode (3)** requests.
+  - `stratum` is set to:
+    - **1** if `timebase_have_time()` and `timebase_is_synced()` are true
+    - **2** if time is available but not “synced”
+    - **16** if time is not available
+  - `LI` (leap indicator) is **0** when synced, **3 (alarm/unsynchronized)** otherwise.
+  - `ref_id` is `"GPS\0"`.
+
+### GPS / Timebase
+- GPS input is read from **UART0** at **9600 baud**.
+- Default UART pin mapping (from `main.cpp`):
+  - `GpsUart::init(9600, /*rx_gpio=*/1, /*tx_gpio=*/0);`
+- NMEA parsing (`gps_state.cpp`):
+  - Supports: **RMC**, **GGA**, **ZDA**
+  - Uses **RMC** (time/date + status `A`) to compute Unix UTC seconds and feed `timebase_on_gps_utc_unix()`.
+  - Uses **GGA** to determine if a fix exists and to populate sats/HDOP.
+- “Acquired” state definition (pre-PPS):
+  - `Acquired` requires `gps.rmc_valid == true` AND `gps.gga_fix == true`
+  - Otherwise the device is `Acquiring`
+
+### Console UI
+- ANSI “single-screen” dashboard (`ui_console.cpp`) refreshed every **500 ms**.
+- Shows:
+  - GPS state + RMC/GGA validity
+  - sats/HDOP
+  - last ZDA time string + last RMC time field
+  - CPU temperature (smoothed EMA)
+  - uptime
+  - Wi-Fi link + IP
+  - whether NTP server is running (`n_status`)
+
+### LED Behavior
+- LED is driven by a repeating timer at **50 ms** (`add_repeating_timer_ms(50, pulse_cb, ...)`).
+- Timer callback computes desired LED state only; the main loop applies it via `led_service()` (safe for CYW43 GPIO).
+- Pattern varies by GPS state (Booting/Acquiring/Acquired/Locked/Error).
 
 ---
 
 ## Hardware
 
-### Target Board
-- Raspberry Pi **Pico W**  
-  (`PICO_BOARD=pico_w`)
+### Target
+- **Raspberry Pi Pico W (RP2040)**
 
 ### GPS Module
-- Waveshare **Pico GPS L76X** (UART NMEA output)
+- Waveshare Pico GPS L76X (or any GPS that outputs NMEA at 9600 baud)
 
-### Wiring (default)
-> Adjust GPIOs to match your local wiring/config.
-
-- GPS **TX → Pico RX (UART0 RX)**  
-- GPS **RX → Pico TX (UART0 TX)** *(optional unless configuring GPS)*
+### Wiring (default pins in code)
+- GPS **TX → Pico GPIO1** (UART0 RX)
+- GPS **RX → Pico GPIO0** (UART0 TX) *(optional unless configuring GPS)*
 - GPS **GND → Pico GND**
-- GPS **VCC → Pico 3V3** (verify your GPS module supports 3.3V)
-
-**Planned PPS wiring (future):**
-- GPS **PPS → Pico GPIO** (GPIO IRQ + `time_us_64()` timestamping)
+- GPS **VCC → Pico 3V3** *(verify module requirements)*
 
 ---
 
-## Software / Toolchain
+## Repository Layout (based on current code)
 
-- Pico SDK (CMake)
-- Ninja
-- VS Code / VSCodium
-- USB serial terminal (example: `picocom`)
+- `main.cpp` — boot, Wi-Fi config/connect, start NTP server, main loop
+- `gps_uart.{h,cpp}` — UART0 RX ISR + ring buffer + line extraction
+- `gps_state.{h,cpp}` — NMEA parsing + GPS state machine + status globals
+- `timebase.{h,cpp}` — UTC Unix baseline + NTP timestamp conversion
+- `ntp_server.{h,cpp}` — lwIP UDP NTP server on port 123
+- `wifi_cfg.{h,cpp}` — CYW43 Wi-Fi init/connect + static IP support + status
+- `ui_console.{h,cpp}` — ANSI dashboard renderer
+- `led.{h,cpp}` — LED patterns + timer callback + `led_service()`
+- `temp.{h,cpp}` — temperature read + EMA smoothing
+- `uptime.{h,cpp}` — uptime formatting
+- `lwipopts.h` — lwIP options
 
 ---
 
-## Build
+## Build Instructions
 
-### 1) Configure
-From the repo root:
+### Prereqs
+- Pico SDK configured and working (CMake + Ninja)
+- Target board: `PICO_BOARD=pico_w`
 
+### Configure / Build
 ```bash
 mkdir -p build
 cd build
 cmake -G Ninja .. -DPICO_BOARD=pico_w
-```
-
-### 2) Compile
-
-```bash
 ninja
 ```
 
-### 3) Flash
+### Flash
 
-This produces a `.uf2` you can drag to the Pico in BOOTSEL mode.
+Put the Pico W into BOOTSEL mode and copy the generated UF2 from `build/` to the mass storage device.
 
-Example:
+---
 
-* `build/<target>.uf2`
+## Wi-Fi Credentials (`wifi_secrets.h`)
+
+`main.cpp` includes `wifi_secrets.h` and expects `ssid` and `pass`.
+
+Create a **local-only** file (do not commit) at your project include path:
+
+```cpp
+// wifi_secrets.h
+#pragma once
+
+// Use inline constexpr to avoid multiple-definition issues.
+inline constexpr const char ssid[] = "YOUR_WIFI_SSID";
+inline constexpr const char pass[] = "YOUR_WIFI_PASSWORD";
+```
+
+Add it to `.gitignore`:
+
+```gitignore
+wifi_secrets.h
+```
 
 ---
 
 ## Running / Console
 
-Connect USB and open the CDC serial port:
+The firmware uses USB CDC stdio and (when `PICO_STDIO_USB` is defined) will wait until a terminal connects.
+
+Example on Linux:
 
 ```bash
 picocom -b 115200 /dev/ttyACM0
 ```
 
-The device prints an ANSI “single screen” dashboard. Logs (if enabled) should be separate from UI redraws.
-
-**Terminal compatibility:** output uses `\r\n`.
+You should see the ANSI dashboard refresh about twice per second.
 
 ---
 
-## NTP Usage
+## Using It as an NTP Server
 
-Once the Pico is on your network (Wi-Fi or other interface depending on your build), point clients to it as an NTP server.
+Once connected to Wi-Fi, the Pico W will listen on **UDP/123**.
 
-Examples:
+* Default static IP in code: **192.168.0.123**
+* Verify on the dashboard (it prints the IP when assigned).
 
 ### Linux (chrony)
 
-Add to `/etc/chrony/chrony.conf`:
+Add:
 
 ```conf
-server <PICO_IP> iburst
+server 192.168.0.123 iburst
 ```
 
 ### Windows
 
-Set a manual peer list:
-
 ```powershell
-w32tm /config /manualpeerlist:"<PICO_IP>" /syncfromflags:manual /update
+w32tm /config /manualpeerlist:"192.168.0.123" /syncfromflags:manual /update
 w32tm /resync
 ```
 
-> Replace `<PICO_IP>` with the Pico’s IP address.
-
 ---
 
-## Project Layout (typical)
+## Current “Stratum-1” Meaning (Important)
 
-* `main.cpp`
-  Application entry point and top-level loop
-* `gps_uart.*`
-  UART0 configuration + line acquisition
-* `gps_state.*`
-  NMEA parsing, state machine, fix/time validity
-* `timebase.*`
-  Time conversion + NTP epoch helpers
-* `ntp_server.*`
-  UDP listener + NTP packet handling
-* `ui_console.*`
-  ANSI dashboard rendering + optional hotkeys
-* `led.*`
-  LED heartbeat / status patterns
-* `wifi_cfg.*` / `wifi_secrets.h`
-  Wi-Fi configuration (if enabled)
-* `lwipopts.h`
-  lwIP configuration overrides
+This build reports **stratum 1** when the internal timebase reports “synced”. Right now, `timebase_on_gps_utc_unix()` sets `g_synced = true` when valid RMC time/date is received (no PPS discipline yet).
 
----
-
-## Design Notes / Conventions
-
-### Code Organization Rules (important)
-
-* All non-inline functions are **declared in headers** and **defined in `.cpp`**
-* **No globals defined in headers**
-
-  * Use `extern` declarations in `.h`
-  * Define exactly once in a `.cpp`
-* Use `static` only for:
-
-  * file-local helpers in `.cpp`
-  * `static inline` helpers in headers
-
-### Real-Time / Determinism
-
-* Avoid blocking calls in main loop and callbacks
-* No `sleep_ms()` in timer callbacks
-* Keep repeating timer callbacks short and deterministic
-
-### NMEA Parsing Scope
-
-* Robust handling of **RMC/GGA/ZDA**
-* Ignore unrelated sentences (GSV/VTG/etc.) without penalizing state
-
----
-
-## Status & Roadmap
-
-### Current (NMEA discipline)
-
-* Uses NMEA time/fix validity for “Acquired”
-* NTP replies are based on the current GPS-derived timebase
-
-### Next (PPS discipline)
-
-* GPIO IRQ on PPS
-* Timestamp using `time_us_64()`
-* Introduce **Locked** state when PPS is stable
-* Reduce jitter and improve holdover behavior
+**Planned next step:** PPS wiring + IRQ timestamping to make “Locked/Stratum-1” truly PPS-disciplined.
 
 ---
 
 ## Troubleshooting
 
-### “It builds but time is wrong”
-
-* Verify GPS has a fix (**RMC status ‘A’**, **GGA fix quality > 0**)
-* Verify baud rate matches GPS output (commonly 9600)
-* Ensure UART wiring is correct (TX/RX crossed)
-
-### “Link errors after adding new files”
-
-* Make sure new `.cpp` files are added to `CMakeLists.txt` `add_executable(...)` sources
-
-### “Float printing doesn’t work”
-
-If you truly need float `printf`, add:
-
-```cmake
-target_link_options(<target> PRIVATE -Wl,-u,_printf_float)
-```
-
-But prefer scaled integers / raw strings.
+* **No NTP service:** dashboard will show Wi-Fi down and `n_status` false if connect fails.
+* **No time / stratum 16:** GPS likely doesn’t have valid RMC (`A`) and/or no GGA fix yet.
+* **Wrong UART pins:** current defaults are RX=GPIO1, TX=GPIO0 at 9600 baud.
+* **Static IP conflict:** change the IP in `main.cpp` (`cfg_wifi()`).
 
 ---
 
-## Security / Deployment Notes
+## Roadmap
 
-* This is a **LAN appliance**. Treat it like infrastructure:
-
-  * Put it on a trusted network segment
-  * Restrict inbound UDP/123 if needed
-* If you later add USB networking (RNDIS/ECM), consider the host-side security posture.
-
----
-
-## License
-
-Choose a license that matches your intent (MIT/BSD-3-Clause are common for Pico projects).
-Add `LICENSE` at repo root.
+* PPS input via GPIO IRQ + `time_us_64()` timestamping
+* Use PPS discipline to define `Locked` state and tighten stratum behavior
+* Optional: make static vs DHCP configurable at build time
+* Optional: additional CDC interfaces (NMEA stream / status console) once USB composite is added
 
 ---
-
-## Acknowledgements
-
-* Raspberry Pi Pico SDK
-* lwIP
-* GPS/NTP protocol docs and community references
 
 ```
-
-If you want, paste your actual repo name, target binary name, and the exact GPIO mapping you’re using (UART0 pins + planned PPS pin), and I’ll tighten the README to match the codebase exactly.
+::contentReference[oaicite:0]{index=0}
 ```
