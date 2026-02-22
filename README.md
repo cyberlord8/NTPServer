@@ -1,4 +1,6 @@
 ````markdown
+> **Note (AI-Generated README):** This `README.md` was generated with AI assistance. It may contain mistakes, outdated assumptions, or phrasing that is overly enthusiastic about the project. Treat it as a starting point and verify technical details (pin mappings, build steps, features, and roadmap items) against the actual code and hardware setup.
+
 # Pico GPS Stratum-1 NTP Server (RP2040 / Pico W)
 
 A **GPS-disciplined (Stratum-1 style) NTP server** built on **Raspberry Pi Pico W (RP2040)** using the **Pico SDK (C/C++)**.
