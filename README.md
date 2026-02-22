@@ -69,7 +69,7 @@ From the repo root:
 mkdir -p build
 cd build
 cmake -G Ninja .. -DPICO_BOARD=pico_w
-````
+```
 
 ### 2) Compile
 
