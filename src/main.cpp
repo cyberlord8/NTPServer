@@ -49,6 +49,7 @@ static void handle_nmea()
 {
     char line[256];
     while (GpsUart::get_line(line, sizeof(line))) {
+        // printf(".");
         update_from_nmea(line);
     }
 }
@@ -80,7 +81,7 @@ int main() {
     }
 #endif
     //optional sleep so you have time to start terminal application to see bootup process
-    sleep_ms(15000);
+    // sleep_ms(15000);
     printf("\x1b[?25l"); // hide cursor
     printf("PICO NTPServer starting...\r\n");
 
@@ -100,6 +101,7 @@ int main() {
     GpsUart::init(9600, /*rx_gpio=*/1, /*tx_gpio=*/0);
 
     while (true) {
+        // printf(".");
         handle_nmea();
         led_service();
         redraw_dashboard(next_ui);

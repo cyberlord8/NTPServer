@@ -3,8 +3,10 @@
 #include "hardware/uart.h"
 #include "hardware/irq.h"
 #include "hardware/gpio.h"
+#include <cstdio>
 
 void GpsUart::init(uint32_t baud, uint32_t rx_gpio, uint32_t tx_gpio) {
+    printf("Initializing GPS UART...");
     uart_init(uart0, baud);
 
     // Map GPIOs to UART0 function

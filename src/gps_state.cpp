@@ -134,6 +134,7 @@ void parse_zda(const char* line) {
 }
 
 void update_from_nmea(const char* line) {
+    // printf("%s", line);
     if (starts_with(line, "$GNRMC,") || starts_with(line, "$GPRMC,")) parse_rmc(line);
     else if (starts_with(line, "$GNGGA,") || starts_with(line, "$GPGGA,")) parse_gga(line);
     else if (starts_with(line, "$GNZDA,") || starts_with(line, "$GPZDA,")) parse_zda(line);
