@@ -24,6 +24,12 @@
 static bool cfg_wifi()
 {
     wifi_cfg_init();
+
+#ifdef CYW43_WL_GPIO_LED_PIN
+    WifiStatus ws = wifi_cfg_get_status();
+    led_set_cyw43_ready(ws.cyw43_ok);
+#endif
+
     WifiStaticIpv4 s{};
     s.ip[0]=192; s.ip[1]=168; s.ip[2]=0; s.ip[3]=123;
     s.netmask[0]=255; s.netmask[1]=255; s.netmask[2]=255; s.netmask[3]=0;
@@ -42,7 +48,8 @@ static void setup_led(repeating_timer_t &timer)
 {
     int rc = pico_led_init();
     hard_assert(rc == PICO_OK);
-    add_repeating_timer_ms(50, pulse_cb, nullptr, &timer);
+    add_repeating_timer_ms(50, pulse_cb, (void*)&g_state, &timer);
+    // add_repeating_timer_ms(50, pulse_cb, nullptr, &timer);
 }
 
 static void handle_nmea()
@@ -95,6 +102,7 @@ int main() {
     else
         n_status = false;
 
+    led_bind_state(&g_state);
     setup_led(timer);
 
 
