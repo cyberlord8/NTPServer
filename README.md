@@ -125,8 +125,8 @@ Create a **local-only** file (do not commit) at your project include path:
 #pragma once
 
 // Use inline constexpr to avoid multiple-definition issues.
-inline constexpr const char ssid[] = "YOUR_WIFI_SSID";
-inline constexpr const char pass[] = "YOUR_WIFI_PASSWORD";
+inline constexpr const char WIFI_SSID[] = "YOUR_WIFI_SSID";
+inline constexpr const char WIFI_PASSWORD[] = "YOUR_WIFI_PASSWORD";
 ```
 
 Add it to `.gitignore`:
