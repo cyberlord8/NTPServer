@@ -1,51 +1,64 @@
 
 # Pico W GPS NTP Server (NMEA-based Stratum-1 Style)
 
-A **GPS-based NTP server** for the **Raspberry Pi Pico W (RP2040)** built with the **Pico SDK (C/C++)**.
+### A **GPS-based NTP server** for the **Raspberry Pi Pico W (RP2040)** built with the **Pico SDK (C/C++)**.
 
-This implementation uses **GPS/NMEA time** (RMC + date) to seed an internal timebase and serves NTP on UDP/123 over **Pico W Wi-Fi**. PPS discipline is planned (the code already reserves a `Locked` state for it).
+**Why the Raspberry Pi Pico?**
+
+Several reasons:
+- Needed a 1U sized unit to fit in a 7 or 10 inch mini rack that is going to have an LCD or eInk display as well as an LED clock
+- Even though a Pi3/4/5 would fit in a 1U space, that's more money and power consumption than required for a project like this
+- While I've created projects for SBCs and micro controllers before, I've never created a project this large on a micro controller
+- A fork of this project will be used for a battery powered portable USB-ETH based NTP `blister-pack` server that can be taken outdoors for a fix then brought back indoors and plugged into a PCs USB port to supply network time for a short period.  If needed bring the unit back outside to get a new fix.
+  
+This implementation uses **GPS/NMEA time** (RMC + date) to seed an internal timebase and serves NTP on UDP/123 over **Pico W Wi-Fi**. 
+
+PPS discipline is planned (the code already reserves a `Locked` state for it).
 
 ---
 
 > **Note (🤖✨AI-Generated README):** This `README.md` was generated with AI assistance. It may contain mistakes, outdated assumptions, or wording that’s overly enthusiastic. Treat it as a starting point and verify details (pin mappings, build steps, features) against the actual code and hardware.
 >
 > Also note, this note about AI generated content was also AI generated. This line is human generated though.
+> 
+> I've gone through the README.md file a few times now and I believe I have corrected all the AI hallucinations/errors. This line is human generated.
 
 ---
 
 ## What the Current Code Does (as of latest sources)
 
 ### Networking / NTP
-- Initializes **Wi-Fi STA mode** and connects using credentials from `wifi_secrets.h`.
-- Configures **static IPv4** by default in `main.cpp`:
+- Initializes **Wi-Fi STA mode** and connects using credentials from `wifi_secrets.h`
+- Configures **static IPv4** by default in `wifi_cfg.h`:
   - IP: **192.168.0.123**
   - Netmask: **255.255.255.0**
   - Gateway: **192.168.0.1**
   - DNS (optional): **192.168.0.200**
-- Starts an **NTP server** on **UDP port 123** when Wi-Fi connect succeeds.
+- Starts an **NTP server** on **UDP port 123** when Wi-Fi connect succeeds
 - NTP reply behavior (`ntp_server.cpp`):
-  - Responds only to **client mode (3)** requests.
+  - Responds only to **client mode (3)** requests
   - `stratum` is set to:
     - **1** if `timebase_have_time()` and `timebase_is_synced()` are true
     - **2** if time is available but not “synced”
     - **16** if time is not available
-  - `LI` (leap indicator) is **0** when synced, **3 (alarm/unsynchronized)** otherwise.
-  - `ref_id` is `"GPS\0"`.
+  - `LI` (leap indicator) is **0** when synced, **3 (alarm/unsynchronized)** otherwise
+  - `ref_id` is `"GPS\0"`
 
 ### GPS / Timebase
-- GPS input is read from **UART0** at **9600 baud**.
+- GPS input is read from **UART0** at **9600 baud**. *(baud rate will need to be increased when PPS is implemented)*
 - Default UART pin mapping (from `main.cpp`):
   - `GpsUart::init(9600, /*rx_gpio=*/1, /*tx_gpio=*/0);`
 - NMEA parsing (`gps_state.cpp`):
+  - Currently at 1Hz, but will increase to 10Hz when PPS is implemented
   - Supports: **RMC**, **GGA**, **ZDA**
-  - Uses **RMC** (time/date + status `A`) to compute Unix UTC seconds and feed `timebase_on_gps_utc_unix()`.
-  - Uses **GGA** to determine if a fix exists and to populate sats/HDOP.
+  - Uses **RMC** (time/date + status `A`) to compute Unix UTC seconds and feed `timebase_on_gps_utc_unix()`
+  - Uses **GGA** to determine if a fix exists and to populate sats/HDOP
 - “Acquired” state definition (pre-PPS):
   - `Acquired` requires `gps.rmc_valid == true` AND `gps.gga_fix == true`
   - Otherwise the device is `Acquiring`
 
 ### Console UI
-- ANSI “single-screen” dashboard (`ui_console.cpp`) refreshed every **500 ms**.
+- ANSI “single-screen” dashboard (`ui_console.cpp`) refreshed every **500 ms**
 - Shows:
   - GPS state + RMC/GGA validity
   - sats/HDOP
@@ -56,9 +69,9 @@ This implementation uses **GPS/NMEA time** (RMC + date) to seed an internal time
   - whether NTP server is running (`n_status`)
 
 ### LED Behavior
-- LED is driven by a repeating timer at **50 ms** (`add_repeating_timer_ms(50, pulse_cb, ...)`).
-- Timer callback computes desired LED state only; the main loop applies it via `led_service()` (safe for CYW43 GPIO).
-- Pattern varies by GPS state (Booting/Acquiring/Acquired/Locked/Error).
+- LED is driven by a repeating timer at **50 ms** (`add_repeating_timer_ms(50, pulse_cb, ...)`)
+- Timer callback computes desired LED state only; the main loop applies it via `led_service()` (safe for CYW43 GPIO)
+- Pattern varies by GPS state (Booting/Acquiring/Acquired/Locked/Error)
 
 ---
 
@@ -72,7 +85,7 @@ This implementation uses **GPS/NMEA time** (RMC + date) to seed an internal time
 
 ### Wiring (default pins in code)
 - GPS **TX → Pico GPIO1** (UART0 RX)
-- GPS **RX → Pico GPIO0** (UART0 TX) *(optional unless configuring GPS)*
+- GPS **RX → Pico GPIO0** (UART0 TX) 
 - GPS **GND → Pico GND**
 - GPS **VCC → Pico 3V3** *(verify module requirements)*
 
@@ -111,6 +124,9 @@ ninja
 ### Flash
 
 Put the Pico W into BOOTSEL mode and copy the generated UF2 from `build/` to the mass storage device.
+
+### Or use VSCode/VSCodium
+<img src="images/vscodium.png" alt="App Screenshot" width="600">
 
 ---
 
