@@ -20,7 +20,6 @@
 #ifdef CYW43_WL_GPIO_LED_PIN
 #include "pico/cyw43_arch.h"
 #endif
-WiFiIPAddress W_IPAddress;
 
 static bool cfg_wifi()
 {
@@ -92,7 +91,7 @@ int main() {
     }
 #endif
     //optional sleep so you have time to start terminal application to see bootup process
-    sleep_ms(10000);
+    // sleep_ms(10000);
     printf("\x1b[?25l"); // hide cursor
     printf("PICO NTPServer starting...\r\n");
 
@@ -102,7 +101,6 @@ int main() {
 
     //NOTE: might need to rethink this once we get USB RNDIS Network device working
     if (cfg_wifi()) {
-      printf("...debug...");
       ntp_server_init();
     } else
       n_status = false;

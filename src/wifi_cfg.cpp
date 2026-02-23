@@ -14,6 +14,7 @@ static bool g_use_static = false;
 static WifiStaticIpv4 g_static{};
 
 static WifiStatus g_status{};
+WiFiIPAddress W_IPAddress;
 
 static uint32_t ip4_to_be(const uint8_t a[4]) {
     // lwIP stores ip4_addr_t.addr in network byte order
