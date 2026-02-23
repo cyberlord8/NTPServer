@@ -7,7 +7,7 @@ This implementation uses **GPS/NMEA time** (RMC + date) to seed an internal time
 
 ---
 
-> **Note (AI-Generated README):** This `README.md` was generated with AI assistance. It may contain mistakes, outdated assumptions, or wording that’s overly enthusiastic. Treat it as a starting point and verify details (pin mappings, build steps, features) against the actual code and hardware.
+> **Note (🤖✨AI-Generated README):** This `README.md` was generated with AI assistance. It may contain mistakes, outdated assumptions, or wording that’s overly enthusiastic. Treat it as a starting point and verify details (pin mappings, build steps, features) against the actual code and hardware.
 >
 > Also note, this note about AI generated content was also AI generated. This line is human generated though.
 
