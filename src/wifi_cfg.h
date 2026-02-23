@@ -1,6 +1,13 @@
 #pragma once
 #include <cstdint>
 
+struct WiFiIPAddress{
+uint8_t OCTET_1 = 192;
+uint8_t OCTET_2 = 168;
+uint8_t OCTET_3 = 0;
+uint8_t OCTET_4 = 123;
+};
+
 struct WifiStatus {
     bool cyw43_ok;
     bool sta_enabled;
@@ -17,6 +24,7 @@ struct WifiStaticIpv4 {
     uint8_t dns[4];    // optional; 0.0.0.0 means "leave as-is"
 };
 
+extern WiFiIPAddress W_IPAddress;
 void wifi_cfg_init();
 
 // call this before connect (or right after init)

@@ -20,18 +20,22 @@
 #ifdef CYW43_WL_GPIO_LED_PIN
 #include "pico/cyw43_arch.h"
 #endif
+WiFiIPAddress W_IPAddress;
 
 static bool cfg_wifi()
 {
-    wifi_cfg_init();
-
 #ifdef CYW43_WL_GPIO_LED_PIN
     WifiStatus ws = wifi_cfg_get_status();
     led_set_cyw43_ready(ws.cyw43_ok);
 #endif
 
+    wifi_cfg_init();
+    // const WifiStaticIpv4 s = wifi_cfg_make_static_ipv4_192_168_0(123,1,200);
+    // wifi_cfg_set_static_ipv4(&s);
+    // bool ok = wifi_cfg_connect_blocking(WIFI_SSID, WIFI_PASSWORD, 15000);
+
     WifiStaticIpv4 s{};
-    s.ip[0]=192; s.ip[1]=168; s.ip[2]=0; s.ip[3]=123;
+    s.ip[0]=W_IPAddress.OCTET_1; s.ip[1]=W_IPAddress.OCTET_2; s.ip[2]=W_IPAddress.OCTET_3; s.ip[3]=W_IPAddress.OCTET_4;
     s.netmask[0]=255; s.netmask[1]=255; s.netmask[2]=255; s.netmask[3]=0;
     s.gateway[0]=192; s.gateway[1]=168; s.gateway[2]=0; s.gateway[3]=1;
     // optional DNS:
@@ -39,8 +43,8 @@ static bool cfg_wifi()
 
     wifi_cfg_set_static_ipv4(&s);
 
-    bool ok = wifi_cfg_connect_blocking(ssid, pass, 15000);
-    //printf("WIFI: %s\r\n", ok ? "CONNECTED" : "FAILED");
+    bool ok = wifi_cfg_connect_blocking(WIFI_SSID, WIFI_PASSWORD, 15000);
+    printf("WIFI: %s\r\n", ok ? "CONNECTED" : "FAILED");
     return ok;
 }
 
@@ -88,7 +92,7 @@ int main() {
     }
 #endif
     //optional sleep so you have time to start terminal application to see bootup process
-    // sleep_ms(15000);
+    sleep_ms(10000);
     printf("\x1b[?25l"); // hide cursor
     printf("PICO NTPServer starting...\r\n");
 
@@ -97,10 +101,11 @@ int main() {
     timebase_init();
 
     //NOTE: might need to rethink this once we get USB RNDIS Network device working
-    if(cfg_wifi())
-        ntp_server_init();
-    else
-        n_status = false;
+    if (cfg_wifi()) {
+      printf("...debug...");
+      ntp_server_init();
+    } else
+      n_status = false;
 
     led_bind_state(&g_state);
     setup_led(timer);

@@ -90,11 +90,30 @@ bool pulse_cb(repeating_timer_t* t) {
 }
 
 void led_service(void) {
-    const bool desired = (s_led_desired != 0u);
-    if (desired == s_last_applied) return;
-    s_last_applied = desired;
-    pico_set_led(desired);
+#if defined(CYW43_WL_GPIO_LED_PIN)
+    static bool last = false;
+    const bool now = s_led_desired;
+
+    if (now != last) {
+        // Optional: lock for safety; keeps CYW43 accesses serialized.
+        // (Safe even if not strictly required.)
+        cyw43_arch_lwip_begin();
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, now);
+        cyw43_arch_lwip_end();
+
+        last = now;
+    }
+#else
+    pico_set_led(g_led_desired);
+#endif
 }
+
+// void led_service(void) {
+//     const bool desired = (s_led_desired != 0u);
+//     if (desired == s_last_applied) return;
+//     s_last_applied = desired;
+//     pico_set_led(desired);
+// }
 
 
 
