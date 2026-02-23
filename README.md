@@ -173,6 +173,7 @@ server 192.168.0.123 iburst
 w32tm /config /manualpeerlist:"192.168.0.123" /syncfromflags:manual /update
 w32tm /resync
 ```
+<img src="images/ntpdate.png" alt="App Screenshot" width="600">
 
 ---
 
