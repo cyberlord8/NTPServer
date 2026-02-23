@@ -1,3 +1,10 @@
 build
-!.vscode/*
 src/wifi_secrets.h
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json
+!.vscode/c_cpp_properties.json
+# optionally include if you want to standardize kits:
+#!.vscode/cmake-kits.json
