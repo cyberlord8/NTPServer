@@ -116,7 +116,7 @@ Put the Pico W into BOOTSEL mode and copy the generated UF2 from `build/` to the
 
 ## Wi-Fi Credentials (`wifi_secrets.h`)
 
-`main.cpp` includes `wifi_secrets.h` and expects `ssid` and `pass`.
+`main.cpp` includes `wifi_secrets.h` and expects `WIFI_SSID` and `WIFI_PASSWORD`.
 
 Create a **local-only** file (do not commit) at your project include path:
 
@@ -148,6 +148,7 @@ picocom -b 115200 /dev/ttyACM0
 ```
 
 You should see the ANSI dashboard refresh about twice per second.
+<img src="images/dashboard.png" alt="App Screenshot" width="600">
 
 ---
 
@@ -172,6 +173,13 @@ server 192.168.0.123 iburst
 w32tm /config /manualpeerlist:"192.168.0.123" /syncfromflags:manual /update
 w32tm /resync
 ```
+
+To check that the NTP server is actually running:
+```bash
+while true; do ntpdate -q 192.168.0.123; sleep 5; done
+```
+
+<img src="images/ntpdate.png" alt="App Screenshot" width="600">
 
 ---
 
