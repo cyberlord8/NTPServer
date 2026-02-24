@@ -22,6 +22,9 @@
 #include "wifi_cfg.h"
 #include "lwip/ip4_addr.h"
 
+#include "hardware/timer.h"
+#include "pps.h"
+
 namespace {
 
 // ANSI
@@ -35,6 +38,58 @@ static constexpr const char* ANSI_CLEAR= "\x1b[2J";
 static constexpr const char* ANSI_HIDE_CURSOR = "\x1b[?25l";
 
 static bool g_once = false;
+
+static void draw_pps_block()
+{
+    const uint32_t edges = pps_get_edges();
+    const uint32_t dt_us = pps_get_last_interval_us();
+    const uint64_t last_edge_us = pps_get_last_edge_us();
+    const uint64_t now_us = time_us_64();
+
+    std::printf("\r\n");
+    std::printf("PPS (GPIO16) : %s\r\n", edges ? "DETECTED" : "NO EDGES");
+    // std::printf("PPS Edges    : %lu\r\n", (unsigned long)edges);
+
+    if (dt_us > 0) {
+        const uint32_t ms = (dt_us + 500) / 1000; // rounded
+        std::printf("PPS Interval : %lu ms\r\n", (unsigned long)ms);
+    } else {
+        std::printf("PPS Interval : (waiting)\r\n");
+    }
+
+    // NEW: freshness / age
+    if (edges == 0 || last_edge_us == 0) {
+        std::printf("PPS Age      : (none)\r\n");
+    } else {
+        const uint64_t age_us = now_us - last_edge_us;
+        const uint32_t age_ms = (uint32_t)((age_us + 500) / 1000); // rounded
+        const uint32_t age_s  = age_ms / 1000;
+        const uint32_t rem_ms = age_ms % 1000;
+
+        // e.g. "0.214 s" without floats
+        std::printf("PPS Age      : %lu.%03lu s\r\n",
+                    (unsigned long)age_s,
+                    (unsigned long)rem_ms);
+    }
+}
+
+// static void draw_pps_block()
+// {
+//     const uint32_t edges = pps_get_edges();
+//     const uint32_t dt_us = pps_get_last_interval_us();
+
+//     std::printf("\r\n");
+//     std::printf("PPS (GPIO16) : %s\r\n", edges ? "DETECTED" : "NO EDGES");
+//     std::printf("PPS Edges    : %lu\r\n", (unsigned long)edges);
+
+//     if (dt_us > 0) {
+//         // show in ms without floats
+//         const uint32_t ms = (dt_us + 500) / 1000; // rounded
+//         std::printf("PPS Interval : %lu ms\r\n", (unsigned long)ms);
+//     } else {
+//         std::printf("PPS Interval : (waiting)\r\n");
+//     }
+// }
 
 static inline const char* gps_state_color(GPSDeviceState s)
 {
@@ -151,7 +206,7 @@ static void draw_notes()
 {
     std::printf("\r\n");
     std::printf("Notes:\r\n");
-    std::printf(" - LOCKED will be PPS disciplined once PPS is wired.\r\n");
+    std::printf(" - LOCKED will be PPS disciplined once PPS logic is implemented.\r\n");
 }
 
 } // namespace
@@ -168,6 +223,7 @@ void dashboard_draw()
 
     draw_header();
     draw_gps_block();
+    draw_pps_block();
     draw_sys_block();
     draw_net_block();
     draw_notes();

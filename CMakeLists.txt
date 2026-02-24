@@ -46,7 +46,8 @@ add_executable(NTPServer
     src/wifi_cfg.cpp
     src/timebase.cpp
     src/ntp_server.cpp
-
+    src/pps.cpp
+    
 )
 
 target_include_directories(NTPServer PRIVATE
