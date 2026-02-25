@@ -12,9 +12,31 @@
  */
 #include "gps_state.h"
 #include "timebase.h"
+#include "pps.h"
+#include "hardware/timer.h"
 
 volatile GPSDeviceState g_state = GPSDeviceState::Booting;
 GpsStatus gps;
+
+static bool pps_recent_and_1hz()
+{
+    // Need at least 2 edges so the interval is real.
+    const uint32_t edges = pps_get_edges();
+    if (edges < 2) return false;
+
+    // Interval sanity check (~1 Hz).
+    const uint32_t interval_us = pps_get_last_interval_us();
+    if (interval_us < 900000u || interval_us > 1100000u) return false;
+
+    // "Recent" check (PPS still present).
+    const uint64_t last_edge_us = pps_get_last_edge_us();
+    if (last_edge_us == 0) return false;
+
+    const uint64_t age_us = time_us_64() - last_edge_us;
+    if (age_us > 1500000ULL) return false;
+
+    return true;
+}
 
 // Very lightweight parsing (enough for display)
 static bool starts_with(const char* s, const char* p) {
@@ -376,6 +398,36 @@ void parse_zda(const char* line) {
              f_time[4], f_time[5]);
 }
 
+// static bool pps_recent_and_1hz()
+// {
+//     // Require at least two edges so interval is meaningful
+//     const uint32_t edges = pps_get_edges();
+//     if (edges < 2) return false;
+
+//     const uint64_t age_us = pps_get_age_us();
+//     if (age_us > 1500000ULL) return false; // older than 1.5s -> not "locked"
+
+//     const uint32_t interval_us = pps_get_last_interval_us();
+//     if (interval_us < 900000u || interval_us > 1100000u) return false; // ~1 Hz window
+
+//     return true;
+// }
+
+void gps_state_service()
+{
+    // Your pre-PPS notion of acquired:
+    const bool acquired = (gps.rmc_valid && gps.gga_fix);
+
+    if (!acquired) {
+        g_state = GPSDeviceState::Acquiring;
+        return;
+    }
+
+    // If acquired, promote to Locked only when PPS is present and sane
+    g_state = pps_recent_and_1hz() ? GPSDeviceState::Locked
+                                   : GPSDeviceState::Acquired;
+}
+
 void update_from_nmea(const char* line) {
     if (!line || line[0] != '$') return;
 
@@ -395,7 +447,8 @@ void update_from_nmea(const char* line) {
 
     if (!handled) return;
 
-    // Current “no PPS yet” notion of acquired:
-    g_state = (gps.rmc_valid && gps.gga_fix) ? GPSDeviceState::Acquired
-                                            : GPSDeviceState::Acquiring;
+    gps_state_service();
+    // // Current “no PPS yet” notion of acquired:
+    // g_state = (gps.rmc_valid && gps.gga_fix) ? GPSDeviceState::Acquired
+    //                                         : GPSDeviceState::Acquiring;
 }

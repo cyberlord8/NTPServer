@@ -143,7 +143,7 @@ static void draw_gps_block()
     const char* st = state_str(g_state);
     const char* col = gps_state_color(g_state);
 
-    std::printf("Device State : %s%s%s\r\n", col, st, ANSI_CLR);
+    std::printf("GPS State    : %s%s%s\r\n", col, st, ANSI_CLR);
     std::printf("RMC Valid    : %s\r\n", yesno(gps.rmc_valid));
     std::printf("GGA Fix      : %s\r\n", yesno(gps.gga_fix));
     std::printf("Satellites   : %d\r\n", gps.sats);
@@ -206,7 +206,9 @@ static void draw_notes()
 {
     std::printf("\r\n");
     std::printf("Notes:\r\n");
-    std::printf(" - LOCKED will be PPS disciplined once PPS logic is implemented.\r\n");
+    std::printf(" - Pico XOSC is not temperature-controlled.\r\n");
+    std::printf(" - Time will drift slightly as temperature changes.\r\n");
+    std::printf(" - For best results, keep the Pico in an enclosure and out of drafty areas.\r\n");
 }
 
 } // namespace

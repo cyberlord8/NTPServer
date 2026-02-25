@@ -54,7 +54,10 @@ void parse_rmc(const char* line);
 void parse_gga(const char* line);
 void parse_zda(const char* line);
 void update_from_nmea(const char* line);
-
+// Promote g_state based on parsed GPS validity + PPS presence.
+// Acquired: RMC valid AND GGA fix
+// Locked:   Acquired AND PPS edges seen recently with ~1 Hz interval
+void gps_state_service();
 
 extern volatile GPSDeviceState g_state;
 extern GpsStatus gps;

@@ -186,6 +186,8 @@ int main() {
         // printf(".");
         handle_nmea();
 
+        gps_state_service();
+
         led_service();
 
         redraw_dashboard(next_ui);
