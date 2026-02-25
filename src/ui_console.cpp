@@ -24,6 +24,7 @@
 
 #include "hardware/timer.h"
 #include "pps.h"
+#include "timebase.h"
 
 namespace {
 
@@ -70,6 +71,18 @@ static void draw_pps_block()
         std::printf("PPS Age      : %lu.%03lu s\r\n",
                     (unsigned long)age_s,
                     (unsigned long)rem_ms);
+        std::printf("PPS AGE      : %s\r\n",
+            (timebase_get_last_pps_edge_us() == 0) ? "N/A" : "OK");
+        std::printf("PPS EDGE CNT : %lu EDGES\r\n", (unsigned long)timebase_get_pps_edges_seen());
+        const uint64_t tb_edge_us = timebase_get_last_pps_edge_us();
+        if (tb_edge_us == 0) {
+            std::printf("TB PPS AGE   : (none)\r\n");
+        } else {
+            const uint64_t tb_age_us = now_us - tb_edge_us;
+            const uint32_t tb_age_ms = (uint32_t)((tb_age_us + 500) / 1000);
+            std::printf("TB PPS AGE   : %lu ms\r\n", (unsigned long)tb_age_ms);
+            std::printf("TB BASE SRC  : %s\r\n", timebase_get_last_set_used_pps() ? "PPS" : "SNAP");
+        }
     }
 }
 
@@ -102,7 +115,7 @@ static void print_fixed_2(const char* label, int32_t centi, const char* unit)
     const int32_t whole = centi / 100;
     int32_t frac = centi % 100;
     if (frac < 0) frac = -frac;
-    std::printf("%-12s: %ld.%02ld %s\r\n", label, (long)whole, (long)frac, unit);
+    std::printf("%-12s : %ld.%02ld %s\r\n", label, (long)whole, (long)frac, unit);
 }
 
 static void print_fixed_1(const char* label, int32_t deci, const char* unit)
@@ -111,7 +124,7 @@ static void print_fixed_1(const char* label, int32_t deci, const char* unit)
     const int32_t whole = deci / 10;
     int32_t frac = deci % 10;
     if (frac < 0) frac = -frac;
-    std::printf("%-12s: %ld.%01ld %s\r\n", label, (long)whole, (long)frac, unit);
+    std::printf("%-12s : %ld.%01ld %s\r\n", label, (long)whole, (long)frac, unit);
 }
 
 static void draw_header()
@@ -154,7 +167,7 @@ static void draw_sys_block()
     const int32_t temp_c_centi = to_fixed(smooth, 100);
     print_fixed_2("CPU Temp", temp_c_centi, "C");
 
-    std::printf("%-12s: %s\r\n", "UPTIME", up);
+    std::printf("%-12s : %s\r\n", "UPTIME", up);
 }
 
 static void draw_net_block()

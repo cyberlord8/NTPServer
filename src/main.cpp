@@ -84,6 +84,8 @@ static void redraw_dashboard(absolute_time_t &next_ui)
     }
 }
 
+static uint32_t s_last_pps_edges = 0;
+
 int main() {
     repeating_timer_t timer;
     absolute_time_t next_ui = make_timeout_time_ms(500);
@@ -130,11 +132,20 @@ int main() {
 
         gps_state_service();
 
-        led_service();
+        const uint32_t edges = pps_get_edges();
+       if (edges != s_last_pps_edges) {
+          s_last_pps_edges = edges;
+           const uint64_t edge_us = pps_get_last_edge_us();
+          if (edge_us != 0) {
+              timebase_note_pps_edge_us(edge_us);
+           }
+       }
 
-        redraw_dashboard(next_ui);
+    led_service();
 
-        tight_loop_contents();
+    redraw_dashboard(next_ui);
+
+    tight_loop_contents();
     }
 }
 

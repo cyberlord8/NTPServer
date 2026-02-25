@@ -15,10 +15,13 @@
 #include "pico/time.h"
 #include "hardware/sync.h"
 
-namespace {
+static uint64_t g_last_pps_edge_us = 0;
+static uint32_t g_pps_edges_seen  = 0;
 
+namespace {
 constexpr uint32_t USEC_PER_SEC = 1000000u;
 constexpr uint64_t NTP_UNIX_EPOCH_DELTA = 2208988800ULL; // 1900->1970
+static bool g_last_set_used_pps = false;
 
 struct TimebaseState {
     // Baseline: UTC unix seconds at baseline, and "snapped" local microsecond counter
@@ -58,6 +61,64 @@ inline uint32_t usec_to_ntp_frac(uint32_t usec) {
 
 } // namespace
 
+bool timebase_get_last_set_used_pps()
+{
+    if (!g_tb.inited || !g_tb.lock) return false;
+
+    const uint32_t save = lock_tb();
+    const bool v = g_last_set_used_pps;
+    unlock_tb(save);
+    return v;
+}
+
+void timebase_note_pps_edge_us(uint64_t edge_us)
+{
+    if (!g_tb.inited || !g_tb.lock) return;
+
+    const uint32_t save = lock_tb();
+
+    // telemetry
+    g_last_pps_edge_us = edge_us;
+    g_pps_edges_seen++;
+
+    // PPS-tick the timebase once we have a baseline.
+    if (g_tb.have_time && g_tb.base_us != 0 && edge_us > g_tb.base_us) {
+
+        const uint64_t dt_us = edge_us - g_tb.base_us;
+
+        // Accept ~1 second step (allows some jitter)
+        if (dt_us >= 900000ULL && dt_us <= 1100000ULL) {
+            g_tb.base_unix += 1;
+            g_tb.base_us    = edge_us;
+
+            g_last_set_used_pps = true;
+            g_tb.synced = true; // later you can require GPS LOCKED
+        }
+    }
+
+    unlock_tb(save);
+}
+
+uint64_t timebase_get_last_pps_edge_us()
+{
+    if (!g_tb.inited || !g_tb.lock) return 0;
+
+    const uint32_t save = lock_tb();
+    const uint64_t v = g_last_pps_edge_us;
+    unlock_tb(save);
+    return v;
+}
+
+uint32_t timebase_get_pps_edges_seen()
+{
+    if (!g_tb.inited || !g_tb.lock) return 0;
+
+    const uint32_t save = lock_tb();
+    const uint32_t v = g_pps_edges_seen;
+    unlock_tb(save);
+    return v;
+}
+
 void timebase_init(void) {
     if (g_tb.inited) return;
 
@@ -82,6 +143,8 @@ void timebase_clear(void) {
     g_tb.synced    = false;
     g_tb.base_unix = 0;
     g_tb.base_us   = 0;
+    g_last_pps_edge_us = 0;
+    g_pps_edges_seen = 0;
     unlock_tb(save);
 }
 
@@ -106,19 +169,253 @@ bool timebase_is_synced(void) {
 void timebase_on_gps_utc_unix(uint64_t unix_utc_seconds) {
     if (!g_tb.inited || !g_tb.lock) return;
 
-    // Local monotonic time in us since boot
+    bool used_pps = false;
     const uint64_t now_us = time_us_64();
+    uint64_t snapped_us = 0;
 
-    // SNAP to the *start* of the current second to remove NMEA arrival latency bias
-    const uint64_t snapped_us = snap_us_to_second(now_us);
+    // First, check for the most recent PPS edge to snap time, if available
+    {
+        const uint32_t save = lock_tb();
+        const uint64_t last_pps = g_last_pps_edge_us;
+        unlock_tb(save);
+
+        if (last_pps != 0 && now_us >= last_pps) {
+            const uint64_t age_us = now_us - last_pps;
+            if (age_us < 990000ULL) {  // Accept only fresh PPS edges
+                snapped_us = last_pps;
+                used_pps = true;
+            }
+        }
+    }
+
+    // Fallback: If no fresh PPS, use current time to snap to the second
+    if (snapped_us == 0) {
+        snapped_us = snap_us_to_second(now_us);
+        used_pps = false;
+    }
 
     const uint32_t save = lock_tb();
-    g_tb.base_unix = unix_utc_seconds;
-    g_tb.base_us   = snapped_us;
-    g_tb.have_time = true;
-    g_tb.synced    = true;   // later: require GPS Locked + PPS discipline
+    const bool have = g_tb.have_time;
+    const uint64_t cur_unix = g_tb.base_unix;
+    const uint64_t cur_base_us = g_tb.base_us;
     unlock_tb(save);
+
+    // If the time is already synced and within the same second, do not reset the baseline.
+    if (have && cur_unix == unix_utc_seconds) {
+        if (used_pps) {
+            // If PPS is active, avoid resetting baseline time (prevent phase shifts).
+            return;
+        }
+    }
+
+    // Update baseline time with the new second if it's not the same or if PPS stepping is active.
+    const uint32_t save2 = lock_tb();
+    g_tb.base_unix = unix_utc_seconds;
+    g_tb.base_us = snapped_us;
+    g_tb.have_time = true;
+    g_tb.synced = true; // Later, refine this with additional checks if required.
+    g_last_set_used_pps = used_pps; // Track if PPS was used in this update
+    unlock_tb(save2);
 }
+
+// void timebase_on_gps_utc_unix(uint64_t unix_utc_seconds) {
+//     if (!g_tb.inited || !g_tb.lock) return;
+
+//     bool used_pps = false;
+//     const uint64_t now_us = time_us_64();
+
+//     // Prefer the most recent PPS edge as the true second boundary when it is fresh.
+//     uint64_t snapped_us = 0;
+//     {
+//         const uint32_t save = lock_tb();
+//         const uint64_t last_pps = g_last_pps_edge_us;
+//         unlock_tb(save);
+
+//         if (last_pps != 0 && now_us >= last_pps) {
+//             const uint64_t age_us = now_us - last_pps;
+//             if (age_us < 990000ULL) {
+//                 snapped_us = last_pps;
+//                 used_pps = true;
+//             }
+//         }
+//     }
+
+//     // Fallback: remove NMEA arrival latency bias using local snap
+//     if (snapped_us == 0) {
+//         snapped_us = snap_us_to_second(now_us);
+//         used_pps = false;
+//     }
+
+//     const uint32_t save = lock_tb();
+//     const bool have = g_tb.have_time;
+//     const uint64_t cur_unix = g_tb.base_unix;
+//     const uint64_t cur_base_us = g_tb.base_us;
+//     unlock_tb(save);
+
+//     // Prevent resetting the baseline if it's the same UTC second
+//     if (have && cur_unix == unix_utc_seconds && used_pps) {
+//         // If PPS is used and we're still in the same second, avoid modifying base_us
+//         return;  // Same second; don't reset baseline again if PPS is active.
+//     }
+
+//     // Now we update the baseline values (only if the second changed or PPS stepping is active)
+//     const uint32_t save2 = lock_tb();
+//     g_tb.base_unix = unix_utc_seconds;
+//     g_tb.base_us   = snapped_us;  // Only update base_us when the second has changed or on PPS update
+//     g_tb.have_time = true;
+//     g_tb.synced    = true;  // later: require GPS Locked + PPS discipline
+//     g_last_set_used_pps = used_pps;   // Track PPS usage
+//     unlock_tb(save2);
+// }
+
+// void timebase_on_gps_utc_unix(uint64_t unix_utc_seconds) {
+//     if (!g_tb.inited || !g_tb.lock) return;
+
+//     const uint64_t now_us = time_us_64();
+
+//     const uint32_t save = lock_tb();
+
+//     const bool have = g_tb.have_time;
+//     const bool pps_active = (g_pps_edges_seen > 0) && (g_tb.base_us != 0);
+
+//     if (have && pps_active) {
+//         // PPS is already the metronome. Only correct the UTC LABEL if we're clearly off.
+//         // Accept within +/- 1 second to avoid fighting edge-alignment / UART timing.
+//         const uint64_t cur_unix = g_tb.base_unix;
+
+//         if (cur_unix == unix_utc_seconds ||
+//             cur_unix + 1 == unix_utc_seconds ||
+//             (cur_unix > 0 && cur_unix - 1 == unix_utc_seconds)) {
+//             // label agrees closely enough; do nothing
+//             unlock_tb(save);
+//             return;
+//         }
+
+//         // Large jump: correct the label, but DO NOT move base_us (PPS keeps phase).
+//         g_tb.base_unix = unix_utc_seconds;
+//         g_tb.have_time = true;
+//         g_tb.synced = true;
+//         // leave g_last_set_used_pps alone here; PPS tick owns it
+//         unlock_tb(save);
+//         return;
+//     }
+
+//     // Startup / no PPS: establish an initial baseline (phase is best-effort here)
+//     uint64_t snapped_us = 0;
+//     if (g_last_pps_edge_us != 0 && now_us >= g_last_pps_edge_us) {
+//         const uint64_t age_us = now_us - g_last_pps_edge_us;
+//         if (age_us < 990000ULL) {
+//             snapped_us = g_last_pps_edge_us;
+//             g_last_set_used_pps = true;
+//         }
+//     }
+//     if (snapped_us == 0) {
+//         snapped_us = now_us - (now_us % USEC_PER_SEC);
+//         g_last_set_used_pps = false;
+//     }
+
+//     g_tb.base_unix = unix_utc_seconds;
+//     g_tb.base_us   = snapped_us;
+//     g_tb.have_time = true;
+//     g_tb.synced    = true;
+
+//     unlock_tb(save);
+// }
+
+// void timebase_on_gps_utc_unix(uint64_t unix_utc_seconds) {
+//     if (!g_tb.inited || !g_tb.lock) return;
+
+//     bool used_pps = false;
+//     const uint64_t now_us = time_us_64();
+
+//     // Prefer the most recent PPS edge as the true second boundary when it is fresh.
+//     uint64_t snapped_us = 0;
+//     {
+//         const uint32_t save = lock_tb();
+//         const uint64_t last_pps = g_last_pps_edge_us;
+//         unlock_tb(save);
+
+//         if (last_pps != 0 && now_us >= last_pps) {
+//             const uint64_t age_us = now_us - last_pps;
+//             if (age_us < 990000ULL) {  // 990ms threshold for PPS freshness
+//                 snapped_us = last_pps;
+//                 used_pps = true;
+//             }
+//         }
+//     }
+
+//     // Fallback: remove NMEA arrival latency bias using local snap
+//     if (snapped_us == 0) {
+//         snapped_us = snap_us_to_second(now_us);
+//         used_pps = false;
+//     }
+
+//     const uint32_t save = lock_tb();
+//     const bool have = g_tb.have_time;
+//     const uint64_t cur_unix = g_tb.base_unix;
+//     unlock_tb(save);
+
+//     // Prevent resetting the baseline if it's the same UTC second
+//     // (this avoids re-labeling and unnecessary phase shifts when PPS is in effect)
+//     if (have && cur_unix == unix_utc_seconds) {
+//         return; // Same second; don't reset baseline again.
+//     }
+
+//     // Update the timebase with new values
+//     g_tb.base_unix = unix_utc_seconds;
+//     g_tb.base_us   = snapped_us;
+//     g_tb.have_time = true;
+//     g_tb.synced    = true;  // later: require GPS Locked + PPS discipline
+//     g_last_set_used_pps = used_pps;  // Track PPS usage only if it updated the timebase
+
+//     unlock_tb(save);
+// }
+
+// void timebase_on_gps_utc_unix(uint64_t unix_utc_seconds) {
+//     if (!g_tb.inited || !g_tb.lock) return;
+
+//     bool used_pps = false;
+//     const uint64_t now_us = time_us_64();
+
+//     // Prefer the most recent PPS edge as the true second boundary when it is fresh.
+//     uint64_t snapped_us = 0;
+//     {
+//         const uint32_t save = lock_tb();
+//         const uint64_t last_pps = g_last_pps_edge_us;
+//         unlock_tb(save);
+
+//         if (last_pps != 0 && now_us >= last_pps) {
+//             const uint64_t age_us = now_us - last_pps;
+//             if (age_us < 990000ULL) {
+//                 snapped_us = last_pps;
+//                 used_pps = true;
+//             }
+//         }
+//     }
+
+//     // Fallback: remove NMEA arrival latency bias using local snap
+//     if (snapped_us == 0) {
+//         snapped_us = snap_us_to_second(now_us);
+//         used_pps = false;
+//     }
+
+//     const uint32_t save = lock_tb();
+//     const bool have = g_tb.have_time;
+//     const uint64_t cur_unix = g_tb.base_unix;
+//     unlock_tb(save);
+
+//     // Prevent resetting the baseline if it's the same UTC second
+//     if (have && cur_unix == unix_utc_seconds) {
+//         return; // Same second; don't reset baseline again.
+//     }
+
+//     g_tb.base_unix = unix_utc_seconds;
+//     g_tb.base_us   = snapped_us;
+//     g_tb.have_time = true;
+//     g_tb.synced    = true;  // later: require GPS Locked + PPS discipline
+//     g_last_set_used_pps = used_pps;   // Track PPS usage
+//     unlock_tb(save);
+// }
 
 bool timebase_now_unix(uint64_t* unix_seconds, uint32_t* usec) {
     if (!unix_seconds || !usec) return false;

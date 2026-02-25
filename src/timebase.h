@@ -35,3 +35,11 @@ bool timebase_now_ntp(uint32_t* ntp_seconds, uint32_t* ntp_fraction);
 // Get Unix seconds+usec for debugging/UI (optional)
 bool timebase_now_unix(uint64_t* unix_seconds, uint32_t* usec);
 
+// Observe PPS edges (microseconds since boot) for future time discipline.
+// This does not change the current timebase behavior yet.
+void timebase_note_pps_edge_us(uint64_t edge_us);
+
+// Debug/telemetry helpers
+uint64_t timebase_get_last_pps_edge_us();
+uint32_t timebase_get_pps_edges_seen();
+bool timebase_get_last_set_used_pps();
