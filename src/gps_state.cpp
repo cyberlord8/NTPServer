@@ -398,21 +398,6 @@ void parse_zda(const char* line) {
              f_time[4], f_time[5]);
 }
 
-// static bool pps_recent_and_1hz()
-// {
-//     // Require at least two edges so interval is meaningful
-//     const uint32_t edges = pps_get_edges();
-//     if (edges < 2) return false;
-
-//     const uint64_t age_us = pps_get_age_us();
-//     if (age_us > 1500000ULL) return false; // older than 1.5s -> not "locked"
-
-//     const uint32_t interval_us = pps_get_last_interval_us();
-//     if (interval_us < 900000u || interval_us > 1100000u) return false; // ~1 Hz window
-
-//     return true;
-// }
-
 void gps_state_service()
 {
     // Your pre-PPS notion of acquired:

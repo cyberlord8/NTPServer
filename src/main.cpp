@@ -45,9 +45,6 @@ static bool cfg_wifi()
 #endif
 
     wifi_cfg_init();
-    // const WifiStaticIpv4 s = wifi_cfg_make_static_ipv4_192_168_0(123,1,200);
-    // wifi_cfg_set_static_ipv4(&s);
-    // bool ok = wifi_cfg_connect_blocking(WIFI_SSID, WIFI_PASSWORD, 15000);
 
     WifiStaticIpv4 s{};
     s.ip[0]=W_IPAddress.OCTET_1; s.ip[1]=W_IPAddress.OCTET_2; s.ip[2]=W_IPAddress.OCTET_3; s.ip[3]=W_IPAddress.OCTET_4;
@@ -68,7 +65,6 @@ static void setup_led(repeating_timer_t &timer)
     int rc = pico_led_init();
     hard_assert(rc == PICO_OK);
     add_repeating_timer_ms(50, pulse_cb, (void*)&g_state, &timer);
-    // add_repeating_timer_ms(50, pulse_cb, nullptr, &timer);
 }
 
 static void handle_nmea()
@@ -87,60 +83,6 @@ static void redraw_dashboard(absolute_time_t &next_ui)
         next_ui = make_timeout_time_ms(500);
     }
 }
-
-// static constexpr uint PPS_GPIO = 16;
-
-// // Updated in IRQ (keep these small + deterministic)
-// static volatile uint32_t g_pps_edges = 0;
-// static volatile uint32_t g_pps_last_interval_us = 0;
-
-// static void pps_irq_callback(uint gpio, uint32_t events)
-// {
-//     (void)events;
-//     if (gpio != PPS_GPIO) return;
-
-//     static uint32_t last_edge_us_32 = 0;  // 32-bit is fine for ~71 minutes wrap
-//     uint32_t now_us_32 = (uint32_t)time_us_64();
-
-//     // interval between rising edges (wrap-safe for uint32_t)
-//     uint32_t dt = now_us_32 - last_edge_us_32;
-//     last_edge_us_32 = now_us_32;
-
-//     g_pps_last_interval_us = dt;
-//     g_pps_edges++;
-// }
-
-// static void pps_test_init()
-// {
-//     gpio_init(PPS_GPIO);
-//     gpio_set_dir(PPS_GPIO, GPIO_IN);
-
-//     // PPS is typically a driven signal; pull-down helps avoid floating if not present.
-//     gpio_pull_down(PPS_GPIO);
-
-//     // Rising edge IRQ on GPIO16
-//     gpio_set_irq_enabled_with_callback(PPS_GPIO, GPIO_IRQ_EDGE_RISE, true, &pps_irq_callback);
-
-//     printf("PPS TEST: LISTENING ON GPIO%u (RISING EDGE)\r\n", PPS_GPIO);
-// }
-
-// static void pps_test_poll_and_print()
-// {
-//     // Print once per second
-//     static absolute_time_t next = nil_time;
-//     if (is_nil_time(next)) next = make_timeout_time_ms(1000);
-
-//     if (absolute_time_diff_us(get_absolute_time(), next) <= 0) {
-//         uint32_t edges = g_pps_edges;
-//         uint32_t dt_us = g_pps_last_interval_us;
-
-//         printf("PPS: EDGES=%lu  LAST_DT=%lu us\r\n",
-//                (unsigned long)edges,
-//                (unsigned long)dt_us);
-
-//         next = make_timeout_time_ms(1000);
-//     }
-// }
 
 int main() {
     repeating_timer_t timer;

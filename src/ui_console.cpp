@@ -73,24 +73,6 @@ static void draw_pps_block()
     }
 }
 
-// static void draw_pps_block()
-// {
-//     const uint32_t edges = pps_get_edges();
-//     const uint32_t dt_us = pps_get_last_interval_us();
-
-//     std::printf("\r\n");
-//     std::printf("PPS (GPIO16) : %s\r\n", edges ? "DETECTED" : "NO EDGES");
-//     std::printf("PPS Edges    : %lu\r\n", (unsigned long)edges);
-
-//     if (dt_us > 0) {
-//         // show in ms without floats
-//         const uint32_t ms = (dt_us + 500) / 1000; // rounded
-//         std::printf("PPS Interval : %lu ms\r\n", (unsigned long)ms);
-//     } else {
-//         std::printf("PPS Interval : (waiting)\r\n");
-//     }
-// }
-
 static inline const char* gps_state_color(GPSDeviceState s)
 {
     switch (s) {
